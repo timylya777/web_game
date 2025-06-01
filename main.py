@@ -67,63 +67,74 @@ async def game(request: Request, server_id: str):
 
 @app.websocket("/ws/{server_id}/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, server_id: str, player_id: str):
-    # Создаем сервер если его нет
-    if server_id not in game_servers:
-        game_servers[server_id] = GameServer()
-        game_servers[server_id].generate_resources()
-        connections[server_id] = {}
-    
     await websocket.accept()
-    game_server = game_servers[server_id]
-    connections[server_id][player_id] = websocket
-    
-    # Добавляем игрока
-    game_server.add_player(player_id)
     
     try:
+        # Создаем сервер если его нет
+        if server_id not in game_servers:
+            game_servers[server_id] = GameServer()
+            game_servers[server_id].generate_resources()
+            connections[server_id] = {}
+        
+        # Добавляем игрока
+        game_servers[server_id].add_player(player_id)
+        connections[server_id][player_id] = websocket
+        
         # Отправляем начальное состояние
         await send_game_state(server_id)
         
+        # Основной цикл обработки сообщений
         while True:
-            data = await websocket.receive_text()
             try:
+                data = await websocket.receive_text()
                 message = json.loads(data)
-                # Обработка движения
-                if message["type"] == "move":
-                    dx = message["dx"]
-                    dy = message["dy"]
-                    game_server.move_player(player_id, dx, dy)
-                    await send_game_state(server_id)
                 
-                # Обработка сбора ресурсов
+                # Обработка разных типов сообщений
+                if message["type"] == "move":
+                    game_servers[server_id].move_player(
+                        player_id, 
+                        message.get("dx", 0),  # Значение по умолчанию 0
+                        message.get("dy", 0)    # Значение по умолчанию 0
+                    )
+                    await send_game_state(server_id)
+                    
                 elif message["type"] == "collect":
-                    resource_id = message["id"]
-                    # Здесь должна быть логика сбора ресурсов
+                    # Обработка сбора ресурсов
                     await send_game_state(server_id)
                     
             except json.JSONDecodeError:
-                pass
+                print(f"Получен некорректный JSON от {player_id}")
+            except KeyError as e:
+                print(f"Отсутствует ключ в сообщении: {e}")
                 
     except WebSocketDisconnect:
-        # Удаляем игрока при отключении
-        game_server.remove_player(player_id)
-        del connections[server_id][player_id]
-        await send_game_state(server_id)
+        print(f"Игрок {player_id} отключился")
+    finally:
+        # Очистка при отключении
+        if server_id in game_servers:
+            game_servers[server_id].remove_player(player_id)
+            if server_id in connections and player_id in connections[server_id]:
+                del connections[server_id][player_id]
+            await send_game_state(server_id)
 
 async def send_game_state(server_id: str):
-    if server_id in game_servers:
-        game_server = game_servers[server_id]
-        state = {
-            "players": game_server.players,
-            "resources": game_server.resources,
-            "map_size": game_server.size
-        }
-        # Отправляем состояние всем подключенным игрокам
-        for player_id, websocket in connections[server_id].items():
-            try:
-                await websocket.send_text(json.dumps(state))
-            except:
-                pass
+    if server_id not in game_servers or server_id not in connections:
+        return
+        
+    game_server = game_servers[server_id]
+    state = {
+        "players": game_server.players,
+        "resources": game_server.resources,
+        "map_size": game_server.size
+    }
+    
+    for player_id, websocket in list(connections[server_id].items()):
+        try:
+            await websocket.send_text(json.dumps(state))
+        except Exception as e:
+            print(f"Ошибка отправки состояния игроку {player_id}: {e}")
+            # Удаляем нерабочее соединение
+            del connections[server_id][player_id]
 
 if __name__ == "__main__":
     import uvicorn
