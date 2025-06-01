@@ -115,6 +115,9 @@ function updateConnectionStatus(text, color) {
     if (statusElement) {
         statusElement.textContent = text;
         statusElement.style.color = color;
+        statusElement.dataset.status = 
+            text === 'Online' ? 'online' : 
+            text === 'Reconnecting...' ? 'reconnecting' : 'offline';
     }
 }
 
