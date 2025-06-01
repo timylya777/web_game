@@ -1,1 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Survival Game</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="player-panel">
+            <h3>Player Info</h3>
+            <div>Health: <span id="health">100</span></div>
+            <div>Hunger: <span id="hunger">100</span></div>
+            <div>Inventory: <span id="inventory">empty</span></div>
+            <div>Status: <span id="connection-status">Offline</span></div>
+        </div>
+        
+        <div class="server-panel">
+            <div>Server: <span id="server-id">{{ server_id }}</span></div>
+            <div>Players: <span id="player-count">1</span></div>
+        </div>
+    </div>
 
+    <script src="/static/game.js"></script>
+</body>
+</html>
