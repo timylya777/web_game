@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>2D Survival - Выбор сервера</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>2D Survival Game</h1>
+        <div class="server-list">
+            <h2>Выберите сервер</h2>
+            <div class="server" onclick="joinServer('main')">
+                <span class="server-name">Основной сервер</span>
+                <span class="server-players">0 игроков</span>
+            </div>
+            <div class="server" onclick="joinServer('forest')">
+                <span class="server-name">Лесной сервер</span>
+                <span class="server-players">0 игроков</span>
+            </div>
+            <div class="server" onclick="joinServer('desert')">
+                <span class="server-name">Пустынный сервер</span>
+                <span class="server-players">0 игроков</span>
+            </div>
+            <div class="server" onclick="joinRandomServer()">
+                <span class="server-name">Случайный сервер</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function joinServer(serverId) {
+            const playerId = 'player_' + Math.random().toString(36).substr(2, 9);
+            window.location.href = `/game/${serverId}?player_id=${playerId}`;
+        }
+        
+        function joinRandomServer() {
+            const servers = ['main', 'forest', 'desert'];
+            const randomServer = servers[Math.floor(Math.random() * servers.length)];
+            joinServer(randomServer);
+        }
+    </script>
+</body>
+</html>
