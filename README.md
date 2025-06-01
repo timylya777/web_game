@@ -1,2 +1,2 @@
 # web_game
-just simplt web game
+just simple web game
