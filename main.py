@@ -86,38 +86,52 @@ async def game(request: Request, server_id: str):
 async def websocket_endpoint(websocket: WebSocket, server_id: str, player_id: str):
     await websocket.accept()
     
+    # Инициализация сервера если нужно
+    if server_id not in game_servers:
+        game_servers[server_id] = GameServer()
+        connections[server_id] = {}
+    
+    # Добавляем игрока
+    game_servers[server_id].add_player(player_id)
+    connections[server_id][player_id] = websocket
+    
     try:
-        # Инициализация сервера если нужно
-        if server_id not in game_servers:
-            game_servers[server_id] = GameServer()
-            connections[server_id] = {}
-        
-        # Добавляем игрока
-        game_servers[server_id].add_player(player_id)
-        connections[server_id][player_id] = websocket
-        
         # Отправляем начальное состояние
         await send_game_state(server_id)
         
-        # Основной цикл сообщений
+        # Основной цикл обработки сообщений
         while True:
             try:
-                data = await websocket.receive_text()
-                message = json.loads(data)
-                
-                if message["type"] == "move":
-                    dx = message.get("dx", 0)
-                    dy = message.get("dy", 0)
-                    game_servers[server_id].move_player(player_id, dx, dy)
-                    await send_game_state(server_id)
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                try:
+                    message = json.loads(data)
                     
-            except json.JSONDecodeError:
-                print(f"Invalid JSON from {player_id}")
-            except Exception as e:
-                print(f"Error with {player_id}: {e}")
+                    if message["type"] == "move":
+                        dx = message.get("dx", 0)
+                        dy = message.get("dy", 0)
+                        game_servers[server_id].move_player(player_id, dx, dy)
+                        await send_game_state(server_id)
+                        
+                except json.JSONDecodeError:
+                    print(f"Invalid JSON from {player_id}")
+                except KeyError as e:
+                    print(f"Missing key in message from {player_id}: {e}")
+                    
+            except asyncio.TimeoutError:
+                # Периодическая проверка соединения
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except:
+                    break  # Соединение разорвано
+            except WebSocketDisconnect:
+                break  # Нормальное отключение
+            except RuntimeError as e:
+                if "disconnect" in str(e):
+                    break
+                raise
                 
-    except WebSocketDisconnect:
-        print(f"Player {player_id} disconnected")
+    except Exception as e:
+        print(f"Error with {player_id}: {e}")
     finally:
         # Очистка при отключении
         if server_id in game_servers:
