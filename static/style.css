@@ -6,7 +6,23 @@ body {
     color: white;
     overflow: hidden;
 }
+#connection-status {
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-weight: bold;
+}
 
+#connection-status[data-status="online"] {
+    background-color: #2ecc71;
+}
+
+#connection-status[data-status="offline"] {
+    background-color: #e74c3c;
+}
+
+#connection-status[data-status="reconnecting"] {
+    background-color: #f39c12;
+}
 .game-container {
     position: relative;
     width: 100vw;
