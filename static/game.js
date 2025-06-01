@@ -6,6 +6,11 @@ let canvas, ctx;
 let keys = {};
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
+// Добавляем новые переменные
+let isSwinging = false;
+let swingProgress = 0;
+const swingSpeed = 0.1;
+let collectedResources = [];
 
 // Инициализация игры при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
