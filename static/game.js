@@ -198,7 +198,7 @@ function updateSwing() {
         return res.progress < 1;
     });
 }
-}
+
 
 function updatePlayerCount() {
     if (gameState.players) {
