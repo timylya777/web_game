@@ -1,28 +1,43 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, List
 import uuid
 import asyncio
 import json
+from pathlib import Path
 
 app = FastAPI()
 
-# Подключаем статические файлы и шаблоны
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# Настройка CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Получаем абсолютный путь к директории проекта
+BASE_DIR = Path(__file__).resolve().parent
+
+# Настраиваем пути к статике и шаблонам
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 # Состояние игры
 class GameServer:
     def __init__(self):
-        self.players: Dict[str, Dict] = {}  # {player_id: {x, y, health, ...}}
-        self.resources = []  # Ресурсы на карте
-        self.size = 1000  # Размер карты
+        self.players: Dict[str, Dict] = {}
+        self.resources = []
+        self.size = 1000
+        self.generate_resources()
         
     def add_player(self, player_id: str):
         self.players[player_id] = {
-            "x": 0,
-            "y": 0,
+            "x": self.size // 2,
+            "y": self.size // 2,
             "health": 100,
             "hunger": 100,
             "inventory": [],
@@ -40,19 +55,21 @@ class GameServer:
             player["y"] = max(0, min(self.size, player["y"] + dy))
     
     def generate_resources(self):
-        # Генерируем случайные ресурсы на карте
         import random
-        for _ in range(20):
-            self.resources.append({
+        resource_types = ["wood", "stone", "food"]
+        self.resources = [
+            {
                 "x": random.randint(0, self.size),
                 "y": random.randint(0, self.size),
-                "type": random.choice(["wood", "stone", "food"]),
+                "type": random.choice(resource_types),
                 "id": str(uuid.uuid4())
-            })
+            }
+            for _ in range(50)
+        ]
 
 # Все игровые серверы
 game_servers: Dict[str, GameServer] = {}
-connections: Dict[str, Dict[str, WebSocket]] = {}  # {server_id: {player_id: websocket}}
+connections: Dict[str, Dict[str, WebSocket]] = {}
 
 @app.get("/")
 async def index(request: Request):
@@ -70,10 +87,9 @@ async def websocket_endpoint(websocket: WebSocket, server_id: str, player_id: st
     await websocket.accept()
     
     try:
-        # Создаем сервер если его нет
+        # Инициализация сервера если нужно
         if server_id not in game_servers:
             game_servers[server_id] = GameServer()
-            game_servers[server_id].generate_resources()
             connections[server_id] = {}
         
         # Добавляем игрока
@@ -83,32 +99,25 @@ async def websocket_endpoint(websocket: WebSocket, server_id: str, player_id: st
         # Отправляем начальное состояние
         await send_game_state(server_id)
         
-        # Основной цикл обработки сообщений
+        # Основной цикл сообщений
         while True:
             try:
                 data = await websocket.receive_text()
                 message = json.loads(data)
                 
-                # Обработка разных типов сообщений
                 if message["type"] == "move":
-                    game_servers[server_id].move_player(
-                        player_id, 
-                        message.get("dx", 0),  # Значение по умолчанию 0
-                        message.get("dy", 0)    # Значение по умолчанию 0
-                    )
-                    await send_game_state(server_id)
-                    
-                elif message["type"] == "collect":
-                    # Обработка сбора ресурсов
+                    dx = message.get("dx", 0)
+                    dy = message.get("dy", 0)
+                    game_servers[server_id].move_player(player_id, dx, dy)
                     await send_game_state(server_id)
                     
             except json.JSONDecodeError:
-                print(f"Получен некорректный JSON от {player_id}")
-            except KeyError as e:
-                print(f"Отсутствует ключ в сообщении: {e}")
+                print(f"Invalid JSON from {player_id}")
+            except Exception as e:
+                print(f"Error with {player_id}: {e}")
                 
     except WebSocketDisconnect:
-        print(f"Игрок {player_id} отключился")
+        print(f"Player {player_id} disconnected")
     finally:
         # Очистка при отключении
         if server_id in game_servers:
@@ -131,9 +140,8 @@ async def send_game_state(server_id: str):
     for player_id, websocket in list(connections[server_id].items()):
         try:
             await websocket.send_text(json.dumps(state))
-        except Exception as e:
-            print(f"Ошибка отправки состояния игроку {player_id}: {e}")
-            # Удаляем нерабочее соединение
+        except:
+            print(f"Failed to send to {player_id}")
             del connections[server_id][player_id]
 
 if __name__ == "__main__":
