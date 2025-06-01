@@ -142,6 +142,62 @@ function gameLoop(serverId) {
             dy: dy
         }));
     }
+     if ((keys[' '] || keys['e']) && !isSwinging) {
+        startSwing();
+    }
+    
+    // Анимация взмаха
+    if (isSwinging) {
+        updateSwing();
+    }
+    
+    renderGame();
+}
+function startSwing() {
+    isSwinging = true;
+    swingProgress = 0;
+    
+    // Проверяем сбор ресурсов
+    if (gameState.players && gameState.players[playerId] && gameState.resources) {
+        const player = gameState.players[playerId];
+        const reachDistance = 50; // Дистанция сбора
+        
+        gameState.resources.forEach(resource => {
+            const dist = Math.sqrt(
+                Math.pow(player.x - resource.x, 2) + 
+                Math.pow(player.y - resource.y, 2)
+            );
+            
+            if (dist < reachDistance) {
+                // Отправляем серверу запрос на сбор
+                ws.send(JSON.stringify({
+                    type: "collect",
+                    resource_id: resource.id
+                }));
+                
+                // Визуальный эффект
+                collectedResources.push({
+                    x: resource.x,
+                    y: resource.y,
+                    type: resource.type,
+                    progress: 0
+                });
+            }
+        });
+    }
+}
+function updateSwing() {
+    swingProgress += swingSpeed;
+    if (swingProgress >= Math.PI) {
+        isSwinging = false;
+    }
+    
+    // Обновляем анимацию собранных ресурсов
+    collectedResources = collectedResources.filter(res => {
+        res.progress += 0.05;
+        return res.progress < 1;
+    });
+}
 }
 
 function updatePlayerCount() {
@@ -217,9 +273,79 @@ function renderGame() {
             }
         });
     }
-    
+    if (isSwinging) {
+        const player = gameState.players[playerId];
+        const handX = canvas.width / 2 + Math.cos(swingProgress) * 30;
+        const handY = canvas.height / 2 + Math.sin(swingProgress) * 30;
+        
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(canvas.width / 2, canvas.height / 2);
+        ctx.lineTo(handX, handY);
+        ctx.stroke();
+    };
+    // Рендерим анимацию сбора ресурсов
+    collectedResources.forEach(res => {
+        const viewX = canvas.width / 2 - gameState.players[playerId].x + res.x;
+        const viewY = canvas.height / 2 - gameState.players[playerId].y + res.y;
+        
+        // Анимация движения к игроку
+        const targetX = 20;
+        const targetY = canvas.height - 20;
+        const animX = viewX + (targetX - viewX) * res.progress;
+        const animY = viewY + (targetY - viewY) * res.progress;
+        
+        // Выбираем emoji для ресурса
+        let emoji;
+        switch(res.type) {
+            case 'wood': emoji = '🌳'; break;
+            case 'stone': emoji = '🪨'; break;
+            case 'food': emoji = '🍎'; break;
+            default: emoji = '✨';
+        }
+        
+        // Рисуем emoji
+        ctx.font = '20px Arial';
+        ctx.fillText(emoji, animX, animY);
+    });
+        
+    // Рендерим инвентарь
+    renderInventory();
     // Миникарта
     drawMiniMap();
+}
+
+
+function renderInventory() {
+    const player = gameState.players?.[playerId];
+    if (!player) return;
+    
+    const invX = 20;
+    const invY = canvas.height - 40;
+    const spacing = 30;
+    
+    // Считаем количество каждого типа ресурсов
+    const counts = {};
+    player.inventory.forEach(item => {
+        counts[item] = (counts[item] || 0) + 1;
+    });
+    
+    // Рисуем инвентарь
+    let offset = 0;
+    Object.entries(counts).forEach(([type, count]) => {
+        let emoji;
+        switch(type) {
+            case 'wood': emoji = '🌳'; break;
+            case 'stone': emoji = '🪨'; break;
+            case 'food': emoji = '🍎'; break;
+            default: emoji = '❓';
+        }
+        
+        ctx.font = '20px Arial';
+        ctx.fillText(`${emoji}×${count}`, invX + offset, invY);
+        offset += spacing;
+    });
 }
 
 function drawMiniMap() {
