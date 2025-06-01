@@ -9,18 +9,44 @@ function startGame(serverId, pId) {
     canvas = document.getElementById('gameCanvas');
     ctx = canvas.getContext('2d');
     
-    // Устанавливаем размер canvas
     canvas.width = 800;
     canvas.height = 600;
     
-    // Подключаемся к WebSocket
-    ws = new WebSocket(`ws://${window.location.host}/ws/${serverId}/${playerId}`);
+    // Функция для подключения WebSocket с обработкой ошибок
+    function connectWebSocket() {
+        // Определяем протокол (ws или wss для HTTPS)
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws/${serverId}/${playerId}`);
+        
+        ws.onopen = () => {
+            console.log('WebSocket подключен');
+        };
+        
+        ws.onmessage = (event) => {
+            try {
+                gameState = JSON.parse(event.data);
+                updatePlayerCount();
+                renderGame();
+            } catch (e) {
+                console.error('Ошибка разбора данных игры:', e);
+            }
+        };
+        
+        ws.onerror = (error) => {
+            console.error('Ошибка WebSocket:', error);
+        };
+        
+        ws.onclose = () => {
+            console.log('WebSocket отключен, пробуем переподключиться...');
+            setTimeout(connectWebSocket, 2000); // Переподключение через 2 секунды
+        };
+    }
     
-    ws.onmessage = (event) => {
-        gameState = JSON.parse(event.data);
-        updatePlayerCount();
-        renderGame();
-    };
+    // Первоначальное подключение
+    connectWebSocket();
+    
+    // Остальной код игры...
+
     
     // Обработка клавиш
     window.addEventListener('keydown', (e) => {
