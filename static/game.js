@@ -48,15 +48,33 @@ function connectWebSocket(serverId) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${window.location.host}/ws/${serverId}/${playerId}`);
     
+    let pingInterval;
+    let reconnectTimeout;
+    
     ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectAttempts = 0;
         updateConnectionStatus('Online', 'green');
+        
+        // Периодическая проверка соединения
+        pingInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({type: "ping"}));
+                } catch (e) {
+                    console.error('Ping error:', e);
+                    handleDisconnection();
+                }
+            }
+        }, 25000); // Каждые 25 секунд
     };
     
     ws.onmessage = (event) => {
         try {
-            gameState = JSON.parse(event.data);
+            const data = JSON.parse(event.data);
+            if (data.type === "pong") return; // Игнорируем pong-ответы
+            
+            gameState = data;
             updatePlayerCount();
             updatePlayerInfo();
             renderGame();
@@ -67,23 +85,29 @@ function connectWebSocket(serverId) {
     
     ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        updateConnectionStatus('Error', 'red');
+        handleDisconnection();
     };
     
     ws.onclose = () => {
         console.log('WebSocket disconnected');
+        handleDisconnection();
+    };
+    
+    function handleDisconnection() {
+        clearInterval(pingInterval);
+        clearTimeout(reconnectTimeout);
         updateConnectionStatus('Offline', 'orange');
         
         if (reconnectAttempts < maxReconnectAttempts) {
             const delay = Math.min(1000 * (reconnectAttempts + 1), 5000);
             console.log(`Reconnecting attempt ${reconnectAttempts + 1} in ${delay}ms...`);
-            setTimeout(() => connectWebSocket(serverId), delay);
+            reconnectTimeout = setTimeout(() => connectWebSocket(serverId), delay);
             reconnectAttempts++;
         } else {
             console.error('Max reconnection attempts reached');
-            alert('Connection lost. Please refresh the page.');
+            updateConnectionStatus('Connection lost', 'red');
         }
-    };
+    }
 }
 
 function updateConnectionStatus(text, color) {
